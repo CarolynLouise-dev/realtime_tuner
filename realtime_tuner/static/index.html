@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GuitarTuna Clone - DSP Tuner</title>
+    <style>
+        :root {
+            --bg-dark: #121212;
+            --card-bg: #1e1e1e;
+            --accent-green: #1ABC9C;
+            --warning-yellow: #f1c40f;
+            --danger-red: #E74C3C;
+            --text-gray: #888;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: white;
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+
+        .app-card {
+            width: 380px;
+            background: var(--card-bg);
+            border-radius: 40px;
+            padding: 30px;
+            text-align: center;
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.6);
+            position: relative;
+        }
+
+        .brand {
+            font-weight: bold;
+            letter-spacing: 3px;
+            font-size: 14px;
+            margin-bottom: 20px;
+            color: #555;
+        }
+
+        .brand span { color: #888; }
+
+        /* Chỉ dẫn phía trên */
+        #direction-hint {
+            height: 25px;
+            font-weight: bold;
+            font-size: 18px;
+            color: var(--danger-red);
+            margin-bottom: 5px;
+            text-transform: uppercase;
+            visibility: hidden; /* Hiện lên khi nốt quá lệch */
+        }
+
+        #note-display {
+            font-size: 80px;
+            font-weight: bold;
+            margin: 10px 0;
+            line-height: 1;
+            transition: color 0.2s;
+        }
+
+        /* Thang đo và Giọt nước */
+        .gauge-container {
+            width: 100%;
+            height: 60px;
+            position: relative;
+            margin-top: 40px;
+            margin-bottom: 40px;
+        }
+
+        .gauge-line {
+            width: 100%;
+            height: 2px;
+            background: #333;
+            position: absolute;
+            bottom: 10px;
+        }
+
+        .center-marker {
+            position: absolute;
+            left: 50%;
+            bottom: 0;
+            width: 4px;
+            height: 30px;
+            background: var(--accent-green);
+            transform: translateX(-50%);
+            z-index: 1;
+        }
+
+        /* Giọt nước (Pointer) */
+        #pointer-wrapper {
+            position: absolute;
+            left: 50%;
+            bottom: 15px;
+            transition: left 0.15s ease-out;
+            transform: translateX(-50%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        #cents-bubble {
+            width: 36px;
+            height: 36px;
+            background: var(--warning-yellow);
+            color: black;
+            border-radius: 50% 50% 50% 4px;
+            transform: rotate(-45deg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 14px;
+            margin-bottom: 10px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+
+        #cents-bubble span {
+            transform: rotate(45deg); /* Xoay số lại cho thẳng */
+        }
+
+        /* Đầu đàn và Chốt đàn */
+        .headstock-area {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .pegs-column {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .peg {
+            width: 45px;
+            height: 45px;
+            border-radius: 50%;
+            border: 2px solid #333;
+            background: #252525;
+            color: #777;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .peg.active {
+            background: white;
+            color: black;
+            border-color: white;
+            transform: scale(1.15);
+            box-shadow: 0 0 15px rgba(255, 255, 255, 0.4);
+        }
+
+        .guitar-head {
+            width: 100px;
+            opacity: 0.9;
+            filter: grayscale(0.3);
+        }
+
+        .footer-info {
+            margin-top: 30px;
+            font-family: monospace;
+            color: #555;
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+        }
+
+        /* Nút bật/tắt Auto */
+        .auto-toggle {
+            position: absolute;
+            top: 30px;
+            right: 30px;
+            font-size: 12px;
+            color: var(--accent-green);
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+<div class="app-card">
+    <div class="brand">GUITAR<span>TUNA </span></div>
+    <div class="auto-toggle">AUTO ●</div>
+
+    <div id="direction-hint">TUNE DOWN!</div>
+    <div id="note-display">--</div>
+
+    <div class="gauge-container">
+        <div id="pointer-wrapper">
+            <div id="cents-bubble"><span>0</span></div>
+        </div>
+        <div class="gauge-line"></div>
+        <div class="center-marker"></div>
+    </div>
+
+    <div class="headstock-area">
+        <div class="pegs-column">
+            <button class="peg" data-note="D3">D</button>
+            <button class="peg" data-note="A2">A</button>
+            <button class="peg" data-note="E2">E</button>
+        </div>
+
+        <img src="https://guitartuna.com/images/headstocks/guitar.webp" class="guitar-head" alt="Guitar Headstock">
+
+        <div class="pegs-column">
+            <button class="peg" data-note="G3">G</button>
+            <button class="peg" data-note="B3">B</button>
+            <button class="peg" data-note="E4">E</button>
+        </div>
+    </div>
+
+    <div class="footer-info">
+        <span id="hz">0.00 Hz</span>
+        <span id="cents-raw">0.00 cents</span>
+    </div>
+</div>
+
+<script>
+    // Khởi tạo WebSocket
+    const ws = new WebSocket("ws://" + window.location.host + "/ws/tuner");
+
+    const noteEl = document.getElementById('note-display');
+    const hzEl = document.getElementById('hz');
+    const centsRawEl = document.getElementById('cents-raw');
+    const bubble = document.getElementById('cents-bubble');
+    const bubbleText = bubble.querySelector('span');
+    const pointerWrapper = document.getElementById('pointer-wrapper');
+    const hintEl = document.getElementById('direction-hint');
+    const pegs = document.querySelectorAll('.peg');
+
+    // Xử lý khi nhấn vào chốt đàn để chọn nốt mục tiêu
+    pegs.forEach(peg => {
+        peg.onclick = () => {
+            pegs.forEach(p => p.classList.remove('active'));
+            peg.classList.add('active');
+
+            if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    type: "target",
+                    note: peg.dataset.note
+                }));
+            }
+        };
+    });
+
+    ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+
+        // 1. Cập nhật chữ nốt nhạc chính
+        noteEl.innerText = data.note;
+        hzEl.innerText = data.hz.toFixed(2) + " Hz";
+        centsRawEl.innerText = data.cents.toFixed(2) + " cts";
+
+        // 2. Tính toán vị trí kim (giả định thang đo từ -50 đến +50 cents)
+        let offset = data.target_cents; // Độ lệch so với nốt mục tiêu
+        let pos = 50 + (offset * 1); // 1 cent = 1% chiều rộng (có thể điều chỉnh hệ số)
+        pos = Math.max(5, Math.min(95, pos)); // Giới hạn không bay ra ngoài
+
+        pointerWrapper.style.left = pos + "%";
+        bubbleText.innerText = Math.abs(Math.round(offset));
+
+        // 3. Logic hiển thị màu sắc và cảnh báo (giống ảnh mẫu)
+        if (Math.abs(offset) < 2) {
+            // Đã chuẩn (In Tune)
+            noteEl.style.color = "var(--accent-green)";
+            bubble.style.background = "var(--accent-green)";
+            hintEl.style.visibility = "hidden";
+        } else {
+            noteEl.style.color = "white";
+
+            if (data.status === "tone down") {
+                // Quá cao -> Báo Tune Down
+                hintEl.innerText = "TUNE DOWN!";
+                hintEl.style.visibility = "visible";
+                bubble.style.background = "var(--danger-red)";
+            } else if (data.status === "tone up") {
+                // Quá thấp -> Báo Tune Up
+                hintEl.innerText = "TUNE UP!";
+                hintEl.style.visibility = "visible";
+                bubble.style.background = "var(--warning-yellow)";
+            } else {
+                hintEl.style.visibility = "hidden";
+                bubble.style.background = "var(--warning-yellow)";
+            }
+        }
+
+        // Tự động kích hoạt nút Peg nếu đang ở chế độ nhận diện nốt đó (Optional)
+        pegs.forEach(p => {
+            if(p.dataset.note === data.note) {
+                // p.classList.add('active'); // Mở dòng này nếu muốn Peg tự nhảy theo nốt đang đánh
+            }
+        });
+    };
+
+    ws.onopen = () => console.log("Connected to Tuner DSP");
+    ws.onclose = () => console.log("Connection closed");
+</script>
+
+</body>
+</html>
