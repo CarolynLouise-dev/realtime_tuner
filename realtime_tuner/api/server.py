@@ -1,5 +1,8 @@
+from pathlib import Path
+
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 import asyncio
 import os
 import json
@@ -10,7 +13,11 @@ from realtime_tuner.core.pitch import detect_pitch
 from realtime_tuner.core.note_mapper import freq_to_note
 from realtime_tuner.core.comparator import compare_pitch
 
+
 app = FastAPI()
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 
 # Khởi tạo luồng âm thanh
 stream = start_stream()
@@ -18,8 +25,8 @@ stream = start_stream()
 
 @app.get("/")
 async def get_index():
-    # Trả về giao diện HTML
     return FileResponse('realtime_tuner/static/index.html', media_type='text/html')
+
 
 @app.post("/tune")
 def tune(audio: list, target: str):

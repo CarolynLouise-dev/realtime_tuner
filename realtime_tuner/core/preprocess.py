@@ -1,59 +1,89 @@
 import numpy as np
 from scipy.signal import butter, sosfilt
 
-def pre_emphasis(signal, coeff=0.95):
-    """Tăng cường tần số cao để giữ độ chi tiết của giọng nói"""
-    return np.append(signal[0], signal[1:] - coeff * signal[:-1])
+# ==============================
+# FILTER DESIGN
+# ==============================
 
-def get_bandpass_sos(fs=44100, low=80, high=1200):
-    """Tạo bộ lọc Second-Order Sections (SOS) - ổn định hơn lfilter"""
+def design_highpass(fs, cutoff=60, order=3):
     nyquist = fs / 2
-    # Sử dụng bậc 5 hoặc 6 để cắt sắc hơn nếu cần
-    sos = butter(5, [low/nyquist, high/nyquist], btype='band', output='sos')
-    return sos
+    return butter(order, cutoff / nyquist, btype="highpass", output="sos")
 
-def noise_gate_professional(frame, threshold=0.02, attack=0.1):
+def design_bandpass(fs, low=70, high=500, order=4):
+    nyquist = fs / 2
+    return butter(order, [low/nyquist, high/nyquist], btype="bandpass", output="sos")
+
+# ==============================
+# INITIALIZE FILTERS
+# ==============================
+
+FS = 44100
+
+HIGHPASS_FILTER = design_highpass(FS, 60)
+BANDPASS_FILTER = design_bandpass(FS, 70, 500)
+
+# ==============================
+# SIGNAL UTILITIES
+# ==============================
+
+def remove_dc(frame):
+    """Loại bỏ DC offset"""
+    return frame - np.mean(frame)
+
+def energy(frame):
+    """Tính năng lượng tín hiệu"""
+    return np.mean(frame ** 2)
+
+def rms(frame):
+    return np.sqrt(np.mean(frame ** 2))
+
+def adaptive_noise_gate(frame, noise_floor=None, ratio=2.5):
     """
-    Lọc nhiễu nền dựa trên năng lượng RMS.
-    Nếu năng lượng thấp hơn ngưỡng, sẽ làm mờ dần (fade) thay vì cắt xoẹt.
+    Noise gate thích ứng theo môi trường
     """
-    rms = np.sqrt(np.mean(frame**2))
-    if rms < threshold:
-        return frame * attack # Giảm âm lượng thay vì trả về None để tránh mất frame
+    if noise_floor is None:
+        noise_floor = np.median(np.abs(frame))
+
+    threshold = noise_floor * ratio
+
+    if rms(frame) < threshold:
+        return None
+
     return frame
 
 def apply_hanning(frame):
-    """Áp dụng cửa sổ Hanning để giảm nhiễu rò rỉ phổ"""
+    """Windowing để giảm spectral leakage"""
     return frame * np.hanning(len(frame))
 
-def normalize(frame):
-    """Đảm bảo biên độ không vượt quá giới hạn âm thanh số"""
-    max_val = np.max(np.abs(frame))
-    if max_val > 0:
-        return frame / max_val
-    return frame
+# ==============================
+# MAIN PREPROCESSOR
+# ==============================
 
-# Khởi tạo bộ lọc một lần duy nhất để tiết kiệm tài nguyên
-SOS_FILTER = get_bandpass_sos()
+def preprocess(frame, fs=FS):
 
-def preprocess(frame, fs=44100):
     if frame is None or len(frame) == 0:
         return None
 
-    # 1. Pre-emphasis: Làm "sáng" giọng nói
-    frame = pre_emphasis(frame)
+    # 1. Remove DC offset
+    frame = remove_dc(frame)
 
-    # 2. Noise Gate: Loại bỏ đoạn tĩnh (nhiễu nền cực thấp)
-    frame = noise_gate_professional(frame, threshold=0.01)
+    # 2. High-pass filter (remove rumble, fan noise)
+    frame = sosfilt(HIGHPASS_FILTER, frame)
 
-    # 3. Bandpass Filter: Chỉ giữ lại dải tần giọng người (80Hz - 1200Hz)
-    # Dùng sosfilt để tránh méo tín hiệu
-    frame = sosfilt(SOS_FILTER, frame)
+    # 3. Band-pass filter (focus instrument frequency)
+    frame = sosfilt(BANDPASS_FILTER, frame)
 
-    # 4. Windowing: Hanning window (nên dùng nếu bạn chuẩn bị đưa vào mô hình AI/FFT)
+    # 4. Energy check (skip silent frames)
+    if energy(frame) < 1e-6:
+        return None
+
+    # 5. Adaptive noise gate
+    frame = adaptive_noise_gate(frame)
+
+    if frame is None:
+        return None
+
+    # 6. Windowing before FFT
     frame = apply_hanning(frame)
-
-    # 5. Normalization: Chuẩn hóa lại âm lượng
-    frame = normalize(frame)
 
     return frame
